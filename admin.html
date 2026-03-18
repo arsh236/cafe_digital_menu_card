@@ -67,6 +67,9 @@
 
         <div class="card">
             <h3>Your Menu</h3>
+            <div class="search-bar" style="margin-top: 15px;">
+                <input type="text" id="admin-search-input" placeholder="Search menu items (by name, description, or category)...">
+            </div>
             <div style="margin-top: 15px;" class="menu-list" id="menu-list">
                 Loading...
             </div>
@@ -170,15 +173,30 @@
             const { data, error } = await supabase.from('menu_items').select('*').eq('cafe_id', currentCafe.id).order('category', { ascending: true }).order('created_at', { ascending: false });
             if(error) return showNotification('Failed to load menu');
 
+            window.menuData = data;
+            renderAdminMenu();
+        }
+
+        function renderAdminMenu(searchTerm = '') {
             const list = document.getElementById('menu-list');
             list.innerHTML = '';
 
-            if (data.length === 0) {
-                list.innerHTML = '<p class="text-secondary text-center">No menu items found. Add some above.</p>';
+            let filtered = window.menuData || [];
+            if (searchTerm) {
+                const term = searchTerm.toLowerCase();
+                filtered = filtered.filter(i => 
+                    i.name.toLowerCase().includes(term) || 
+                    (i.description && i.description.toLowerCase().includes(term)) ||
+                    (i.category && i.category.toLowerCase().includes(term))
+                );
+            }
+
+            if (filtered.length === 0) {
+                list.innerHTML = '<p class="text-secondary text-center">No menu items found.</p>';
                 return;
             }
 
-            const grouped = data.reduce((acc, obj) => {
+            const grouped = filtered.reduce((acc, obj) => {
                 const key = obj.category || 'Uncategorized';
                 if (!acc[key]) acc[key] = [];
                 acc[key].push(obj);
@@ -206,8 +224,11 @@
                 });
             }
             list.innerHTML = html;
-            window.menuData = data;
         }
+
+        document.getElementById('admin-search-input').addEventListener('input', (e) => {
+            renderAdminMenu(e.target.value);
+        });
 
         document.getElementById('menu-form').addEventListener('submit', async (e) => {
             e.preventDefault();

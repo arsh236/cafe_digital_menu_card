@@ -167,7 +167,7 @@
 
         // Menu CRUD
         async function loadMenuItems() {
-            const { data, error } = await supabase.from('menu_items').select('*').eq('cafe_id', currentCafe.id).order('created_at', { ascending: false });
+            const { data, error } = await supabase.from('menu_items').select('*').eq('cafe_id', currentCafe.id).order('category', { ascending: true }).order('created_at', { ascending: false });
             if(error) return showNotification('Failed to load menu');
 
             const list = document.getElementById('menu-list');
@@ -178,23 +178,34 @@
                 return;
             }
 
-            data.forEach(item => {
-                const div = document.createElement('div');
-                div.className = 'menu-item';
-                div.innerHTML = `
-                    <div class="menu-item-info">
-                        <h3>${item.name} ${item.is_active === false ? '<span style="color:var(--danger-color); font-size:0.8rem;">(Inactive)</span>' : ''}</h3>
-                        <div class="category">${item.category}</div>
-                        <p class="text-secondary" style="font-size:0.9rem; margin-top:5px;">${item.description || ''}</p>
-                        <div class="price">$${item.price.toFixed(2)}</div>
-                    </div>
-                    <div class="menu-item-actions">
-                        <button onclick="editItem('${item.id}')" style="background:#555; padding: 8px;">Edit</button>
-                        <button onclick="deleteItem('${item.id}')" class="btn-danger" style="padding: 8px;">Delete</button>
-                    </div>
-                `;
-                list.appendChild(div);
-            });
+            const grouped = data.reduce((acc, obj) => {
+                const key = obj.category || 'Uncategorized';
+                if (!acc[key]) acc[key] = [];
+                acc[key].push(obj);
+                return acc;
+            }, {});
+
+            let html = '';
+            for (const cat in grouped) {
+                html += `<h3 style="margin: 20px 0 10px; color: var(--primary-color); border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">${cat}</h3>`;
+                grouped[cat].forEach(item => {
+                    html += `
+                        <div class="menu-item">
+                            <div class="menu-item-info">
+                                <h3>${item.name} ${item.is_active === false ? '<span style="color:var(--danger-color); font-size:0.8rem;">(Inactive)</span>' : ''}</h3>
+                                <div class="category">${item.category}</div>
+                                <p class="text-secondary" style="font-size:0.9rem; margin-top:5px;">${item.description || ''}</p>
+                                <div class="price">₹${item.price.toFixed(2)}</div>
+                            </div>
+                            <div class="menu-item-actions">
+                                <button onclick="editItem('${item.id}')" style="background:#555; padding: 8px;">Edit</button>
+                                <button onclick="deleteItem('${item.id}')" class="btn-danger" style="padding: 8px;">Delete</button>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+            list.innerHTML = html;
             window.menuData = data;
         }
 
@@ -248,6 +259,9 @@
 
             document.getElementById('save-item-btn').textContent = 'Update Item';
             document.getElementById('cancel-edit').classList.remove('d-none');
+
+            document.getElementById('menu-management').scrollIntoView({ behavior: 'smooth' });
+            document.getElementById('item-desc').focus();
         };
 
         document.getElementById('cancel-edit').addEventListener('click', () => {

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Menu - Login</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div class="auth-container card">
+        <header>
+            <h1 id="form-title">Login</h1>
+        </header>
+
+        <div id="notification" class="notification"></div>
+
+        <form id="auth-form">
+            <div class="form-group">
+                <label for="phone">Phone Number</label>
+                <input type="text" id="phone" required placeholder="Enter your phone number">
+            </div>
+            <div class="form-group" id="pass-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" required placeholder="Enter your password">
+            </div>
+            <button type="submit" id="submit-btn" style="color: black;">Login</button>
+        </form>
+
+        <div class="auth-links">
+            <span id="toggle-text">Don't have an account? </span>
+            <a href="signup.html" id="toggle-link">Sign up</a>
+        </div>
+    </div>
+    
+    <script src="supabase.js"></script>
+    <script>
+        document.getElementById('auth-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const phone = document.getElementById('phone').value.trim();
+            const password = document.getElementById('password').value.trim();
+            
+            if(!phone || !password) {
+                return showNotification('Please enter phone number and password', 'error');
+            }
+
+            const submitBtn = document.getElementById('submit-btn');
+            submitBtn.textContent = 'Processing...';
+            submitBtn.disabled = true;
+
+            try {
+                // loginUser handles the hashing, matching, explicit error throwing, and inserting into localStorage securely.
+                await loginUser(phone, password);
+                
+                // If it succeeds, push to dashboard. The dashboard natively runs requireAuth() to check superadmin status.
+                window.location.href = 'admin.html';
+            } catch (err) {
+                console.error(err);
+                showNotification(err.message, 'error');
+            } finally {
+                submitBtn.textContent = 'Login';
+                submitBtn.disabled = false;
+            }
+        });
+
+        window.onload = () => {
+            const user = getCurrentUser();
+            if(user) {
+                if(user.is_superadmin) window.location.href = 'superadmin.html';
+                else window.location.href = 'admin.html';
+            }
+        };
+    </script>
+</body>
+</html>

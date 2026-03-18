@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Menu - Sign Up</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div class="auth-container card">
+        <header>
+            <h1 id="form-title">Sign Up</h1>
+        </header>
+
+        <div id="notification" class="notification"></div>
+
+        <form id="auth-form">
+            <div class="form-group">
+                <label for="phone">Phone Number</label>
+                <input type="text" id="phone" required placeholder="Enter a unique phone number">
+            </div>
+            <div class="form-group" id="pass-group">
+                <label for="password">Password (Min 4 chars)</label>
+                <input type="password" id="password" required placeholder="Create a password" minlength="4">
+            </div>
+            <button type="submit" id="submit-btn" style="color: black;">Register</button>
+        </form>
+
+        <div class="auth-links">
+            <span id="toggle-text">Already have an account? </span>
+            <a href="login.html" id="toggle-link">Login</a>
+        </div>
+    </div>
+    
+    <script src="supabase.js"></script>
+    <script>
+        document.getElementById('auth-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const phone = document.getElementById('phone').value.trim();
+            const password = document.getElementById('password').value.trim();
+            
+            if(!phone || password.length < 4) {
+                return showNotification('Phone number required and password must be at least 4 characters long', 'error');
+            }
+
+            const submitBtn = document.getElementById('submit-btn');
+            submitBtn.textContent = 'Processing...';
+            submitBtn.disabled = true;
+
+            try {
+                // registerUser handles hashing and running the Supabase securely via RPC function
+                await registerUser(phone, password);
+                
+                showNotification('Registration successful! Redirecting to login...', 'success');
+                setTimeout(() => window.location.href = 'login.html', 1500);
+            } catch (err) {
+                console.error(err);
+                showNotification(err.message, 'error');
+                submitBtn.textContent = 'Register';
+                submitBtn.disabled = false;
+            }
+        });
+
+        window.onload = () => {
+            const user = getCurrentUser();
+            if(user) {
+                if(user.is_superadmin) window.location.href = 'superadmin.html';
+                else window.location.href = 'admin.html';
+            }
+        };
+    </script>
+</body>
+</html>

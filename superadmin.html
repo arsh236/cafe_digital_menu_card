@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Menu - Superadmin</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <h2>Superadmin Panel</h2>
+        <a href="#" id="logout-btn" class="btn-danger" style="padding: 10px 15px; border-radius: 5px;">Logout</a>
+    </nav>
+
+    <div class="container" style="max-width: 1000px;">
+        <div id="notification" class="notification"></div>
+        
+        <div class="card">
+            <h3>Registered Cafes</h3>
+            <div class="table-responsive" style="margin-top: 20px;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Cafe Name</th>
+                            <th>Owner UUID</th>
+                            <th>Plan</th>
+                            <th>Expiry Date</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cafes-tbody">
+                        <tr><td colspan="6" class="text-center">Loading cafes...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="supabase.js"></script>
+    <script>
+        const currUser = requireAuth(true); // Passes allowSuperAdmin = true
+        if(!currUser.is_superadmin) {
+            window.location.href = 'admin.html';
+        }
+
+        document.getElementById('logout-btn').addEventListener('click', () => {
+            logoutUser();
+        });
+
+        async function loadCafes() {
+            try {
+                // Anyone can SELECT cafes globally now, so this works fine
+                const { data: cafes, error } = await supabase
+                    .from('cafes')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+                
+                if(error) throw error;
+                renderTable(cafes);
+            } catch (err) {
+                console.error(err);
+                showNotification('Failed to fetch cafes.', 'error');
+            }
+        }
+
+        function renderTable(cafes) {
+            const tbody = document.getElementById('cafes-tbody');
+            if(!cafes || cafes.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center">No cafes found</td></tr>';
+                return;
+            }
+
+            const now = new Date();
+
+            tbody.innerHTML = cafes.map(cafe => {
+                const expiry = new Date(cafe.expiry_date);
+                const isExpired = now > expiry || !cafe.is_active;
+                
+                return `
+                    <tr>
+                        <td><strong>${cafe.name}</strong></td>
+                        <td style="font-size: 0.8rem; color: #555;">${cafe.owner_id.split('-')[0]}...</td>
+                        <td>${cafe.plan}</td>
+                        <td>${expiry.toLocaleDateString()}</td>
+                        <td style="color: ${isExpired ? 'var(--danger-color)' : 'var(--success-color)'}; font-weight: bold;">
+                            ${cafe.is_active ? 'Active' : 'Deactivated'}
+                        </td>
+                        <td style="display: flex; gap: 5px;">
+                            ${ cafe.is_active 
+                                ? `<button class="btn-danger" style="padding: 5px; font-size:0.8rem;" onclick="toggleStatus('${cafe.id}', false)">Deactivate</button>`
+                                : `<button style="background:var(--success-color); color:#fff; padding: 5px; font-size:0.8rem;" onclick="toggleStatus('${cafe.id}', true)">Activate</button>`
+                            }
+                            <button style="padding: 5px; font-size:0.8rem; background: var(--primary-color); color: #000;" onclick="extendPlan('${cafe.id}', '${cafe.expiry_date}')">+30 Days</button>
+                            ${ cafe.plan !== 'Pro' ? `<button onclick="upgradeToPro('${cafe.id}')" style="padding: 5px; font-size:0.8rem; background: #000; color: var(--primary-color); border: 1px solid var(--primary-color);">Make Pro</button>` : `<span style="font-size: 0.8rem; color: var(--primary-color); display:flex; align-items:center;">PRO ✓</span>` }
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        window.toggleStatus = async (cafeId, isActive) => {
+            try {
+                const { error } = await supabase.rpc('secure_superadmin_update_cafe', {
+                    p_user_id: currUser.id,
+                    p_password_hash: currUser.password_hash,
+                    p_cafe_id: cafeId,
+                    p_is_active: isActive,
+                    p_expiry_date: null,
+                    p_plan: null
+                });
+                if(error) throw error;
+                showNotification('Cafe status updated', 'success');
+                loadCafes();
+            } catch(e) {
+                showNotification('Failed to update status', 'error');
+            }
+        };
+
+        window.extendPlan = async (cafeId, currentExpiryStr) => {
+            try {
+                const currentExpiry = new Date(currentExpiryStr);
+                const now = new Date();
+                
+                const baseDate = currentExpiry > now ? currentExpiry : now;
+                baseDate.setDate(baseDate.getDate() + 30);
+                
+                const { error } = await supabase.rpc('secure_superadmin_update_cafe', {
+                    p_user_id: currUser.id,
+                    p_password_hash: currUser.password_hash,
+                    p_cafe_id: cafeId,
+                    p_is_active: true,
+                    p_expiry_date: baseDate.toISOString(),
+                    p_plan: null
+                });
+                
+                if(error) throw error;
+                showNotification('Extended by 30 days', 'success');
+                loadCafes();
+            } catch(e) {
+                showNotification('Failed to extend plan', 'error');
+            }
+        };
+
+        window.upgradeToPro = async (cafeId) => {
+            try {
+                const { error } = await supabase.rpc('secure_superadmin_update_cafe', {
+                    p_user_id: currUser.id,
+                    p_password_hash: currUser.password_hash,
+                    p_cafe_id: cafeId,
+                    p_is_active: null,
+                    p_expiry_date: null,
+                    p_plan: 'Pro'
+                });
+                
+                if(error) throw error;
+                showNotification('Cafe upgraded to PRO!', 'success');
+                loadCafes();
+            } catch(e) {
+                console.error(e);
+                showNotification('Failed to upgrade plan: ' + e.message, 'error');
+            }
+        };
+
+        loadCafes();
+    </script>
+</body>
+</html>

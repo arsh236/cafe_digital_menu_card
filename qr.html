@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Menu - Generate QR</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+
+<body>
+    <nav class="navbar text-center flex" style="justify-content:space-between">
+        <h2>Your QR Code</h2>
+        <div>
+            <button onclick="window.history.back()" class="btn-secondary" style="width: auto;">Back to Admin</button>
+            <button onclick="window.print()" style="width: auto;">Print</button>
+        </div>
+    </nav>
+
+    <div class="qr-container shadow">
+        <h2>Scan to View Menu</h2>
+        <div id="qrcode"></div>
+        <p class="text-secondary" style="margin-top:20px; font-size: 0.9rem;">
+            Place this QR code on your tables. Customers can scan it to view your digital menu dynamically!
+        </p>
+    </div>
+
+    <script src="supabase.js"></script>
+    <script>
+        const user = requireAuth();
+
+        async function init() {
+            try {
+                // Fetch cafe
+                const { data: cafes, error } = await supabase
+                    .from('cafes')
+                    .select('id, name')
+                    .eq('owner_id', user.id);
+
+                if (error) throw error;
+                if (!cafes || cafes.length === 0) {
+                    alert('Cafe not found. Create one by visiting dashboard first.');
+                    window.location.href = 'admin.html';
+                    return;
+                }
+
+                currentCafe = cafes[0];
+                generateQR(currentCafe.id);
+
+            } catch (err) {
+                console.error(err);
+                alert('Could not generate QR code');
+            }
+        }
+
+        function generateQR(cafeId) {
+            const currentUrl = new URL(window.location.href);
+
+            // MAGIC FIX: Mobile phones don't know what "localhost" is! 
+            // If the URL says "localhost", we swap it intelligently with your PC's real Wi-Fi IP address so the phone can reach it!
+            // if (currentUrl.hostname === 'localhost' || currentUrl.hostname === '127.0.0.1') {
+            //     currentUrl.hostname = '192.168.31.150';
+            // }
+
+            // Replace 'qr' or 'qr.html' at the end of the path with root '/'
+            // This prevents npx serve from 301 Redirecting '/index.html' to '/' and dropping the query parameters!
+            currentUrl.pathname = currentUrl.pathname.replace(/qr(\.html)?$/, '');
+            currentUrl.search = '?cafe=' + cafeId;
+
+            const menuUrl = currentUrl.toString();
+
+            new QRCode(document.getElementById("qrcode"), {
+                text: menuUrl,
+                width: 250,
+                height: 250,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.H
+            });
+        }
+
+        init();
+    </script>
+</body>
+
+</html>

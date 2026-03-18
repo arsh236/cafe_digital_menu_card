@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Menu</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        /* Customer Menu specific overrides */
+        body { padding-bottom: 50px; }
+        .hero { 
+            text-align: center; padding: 40px 20px; 
+            background: linear-gradient(to bottom, #111, var(--bg-color));
+            margin-bottom: 20px;
+        }
+        .hero h1 { font-size: 2.5rem; color: var(--primary-color); }
+        .menu-unavailable { text-align: center; margin-top: 100px; color: var(--danger-color); font-size: 1.5rem; }
+    </style>
+</head>
+<body>
+    <div id="app" style="display: none;">
+        <div class="hero">
+            <h1 id="cafe-title">Loading...</h1>
+        </div>
+
+        <div class="container">
+            <div class="search-bar">
+                <input type="text" id="search-input" placeholder="Search for items...">
+            </div>
+
+            <div class="category-pills" id="category-container">
+                <!-- Pills will be injected here -->
+            </div>
+
+            <div class="menu-list" id="customer-menu-list">
+                <!-- Menu items go here -->
+            </div>
+        </div>
+    </div>
+
+    <div id="error-screen" class="menu-unavailable d-none">
+        Menu not available
+    </div>
+
+    <script src="supabase.js"></script>
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const rawParam = urlParams.get('cafe');
+        
+        // Sometimes QR scanners or URL edits duplicate the query parameters.
+        // We solely extract the main UUID length to be absolutely safe (36 characters).
+        const cafeId = rawParam ? rawParam.substring(0, 36) : null;
+        
+        let allItems = [];
+        let currentCategory = 'All';
+
+        async function init() {
+            if(!cafeId) {
+                showError("No Cafe ID found in URL bar!");
+                return;
+            }
+
+            try {
+                // Fetch cafe details
+                const { data: cafe, error: cafeErr } = await supabase
+                    .from('cafes')
+                    .select('*')
+                    .eq('id', cafeId)
+                    .single();
+
+                if (cafeErr || !cafe) throw new Error('Cafe not found in DB');
+
+                // Check active & expiry
+                const now = new Date();
+                const expiry = new Date(cafe.expiry_date);
+                if (!cafe.is_active) {
+                    showError("Cafe is marked as inactive by the owner.");
+                    return;
+                }
+                if (now > expiry) {
+                    showError("Cafe subscription has expired.");
+                    return;
+                }
+
+                document.getElementById('cafe-title').textContent = cafe.name;
+                document.getElementById('app').style.display = 'block';
+
+                // Fetch menu
+                const { data: items, error: itemsErr } = await supabase
+                    .from('menu_items')
+                    .select('*')
+                    .eq('cafe_id', cafeId)
+                    .eq('is_active', true)
+                    .order('category', { ascending: true });
+
+                if (itemsErr) throw itemsErr;
+
+                allItems = items;
+                renderCategories();
+                renderMenu();
+
+            } catch(e) {
+                console.error(e);
+                showError('Error: ' + e.message);
+            }
+        }
+
+        function showError(msg = "Menu not available") {
+            document.getElementById('app').style.display = 'none';
+            document.getElementById('error-screen').classList.remove('d-none');
+            document.getElementById('error-screen').textContent = msg;
+        }
+
+        function renderCategories() {
+            const container = document.getElementById('category-container');
+            const categories = ['All', ...new Set(allItems.map(i => i.category))];
+            
+            container.innerHTML = categories.map(cat => `
+                <div class="pill ${currentCategory === cat ? 'active' : ''}" 
+                     onclick="setCategory('${cat.replace(/'/g, "\\'")}')">
+                    ${cat}
+                </div>
+            `).join('');
+        }
+
+        window.setCategory = (cat) => {
+            currentCategory = cat;
+            renderCategories();
+            renderMenu();
+        };
+
+        function renderMenu(searchTerm = '') {
+            const list = document.getElementById('customer-menu-list');
+            
+            let filtered = allItems;
+            if (currentCategory !== 'All') {
+                filtered = filtered.filter(i => i.category === currentCategory);
+            }
+            if (searchTerm) {
+                const term = searchTerm.toLowerCase();
+                filtered = filtered.filter(i => i.name.toLowerCase().includes(term) || (i.description && i.description.toLowerCase().includes(term)));
+            }
+
+            if (filtered.length === 0) {
+                list.innerHTML = '<p class="text-center text-secondary">No items found.</p>';
+                return;
+            }
+
+            // Group by category if "All" is selected
+            if (currentCategory === 'All' && !searchTerm) {
+                const grouped = filtered.reduce((acc, obj) => {
+                    const key = obj.category;
+                    if (!acc[key]) acc[key] = [];
+                    acc[key].push(obj);
+                    return acc;
+                }, {});
+
+                let html = '';
+                for (const cat in grouped) {
+                    html += `<h3 style="margin: 20px 0 10px; color: var(--primary-color); border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">${cat}</h3>`;
+                    grouped[cat].forEach(item => { html += generateItemHTML(item); });
+                }
+                list.innerHTML = html;
+            } else {
+                list.innerHTML = filtered.map(item => generateItemHTML(item)).join('');
+            }
+        }
+
+        function generateItemHTML(item) {
+            return `
+                <div class="menu-item" style="border: none; border-bottom: 1px solid var(--border-color); border-radius: 0; background: transparent;">
+                    <div class="menu-item-info">
+                        <h3 style="font-size: 1.1rem;">${item.name}</h3>
+                        ${item.description ? `<p class="text-secondary" style="font-size: 0.9rem; margin-top: 5px;">${item.description}</p>` : ''}
+                    </div>
+                    <div class="price" style="font-size: 1.1rem; min-width: 60px; text-align: right;">$${item.price.toFixed(2)}</div>
+                </div>
+            `;
+        }
+
+        document.getElementById('search-input').addEventListener('input', (e) => {
+            renderMenu(e.target.value);
+        });
+
+        init();
+    </script>
+</body>
+</html>

@@ -275,6 +275,6 @@ th {
 
 @media print {
     body { background: white; color: black; }
-    .navbar, button { display: none; }
+    .navbar, button, .qr-container p { display: none; }
     .qr-container { box-shadow: none; margin: 0 auto; }
 }
